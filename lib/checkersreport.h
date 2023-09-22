@@ -16,28 +16,29 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef colorH
-#define colorH
+#pragma once
 
-#include "config.h"
-
-#include <ostream>
+#include "settings.h"
+#include <set>
 #include <string>
 
-enum class Color {
-    Reset      = 0,
-    Bold       = 1,
-    Dim        = 2,
-    FgRed      = 31,
-    FgGreen    = 32,
-    FgBlue     = 34,
-    FgMagenta  = 35,
-    FgDefault  = 39
+class CPPCHECKLIB CheckersReport {
+public:
+    CheckersReport(const Settings& settings, const std::set<std::string>& activeCheckers);
+
+    int getActiveCheckersCount();
+    int getAllCheckersCount();
+
+    std::string getReport(const std::string& criticalErrors) const;
+
+private:
+    const Settings& mSettings;
+    const std::set<std::string>& mActiveCheckers;
+
+    void countCheckers();
+
+    int mActiveCheckersCount = 0;
+    int mAllCheckersCount = 0;
 };
-CPPCHECKLIB std::ostream& operator<<(std::ostream& os, Color c);
 
-CPPCHECKLIB std::string toString(Color c);
 
-extern CPPCHECKLIB bool gDisableColors; // for testing
-
-#endif

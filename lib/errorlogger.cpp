@@ -45,6 +45,9 @@ const std::set<std::string> ErrorLogger::mCriticalErrorIds{
     "internalAstError",
     "instantiationError",
     "internalError",
+    "premium-internalError",
+    "premium-invalidArgument",
+    "premium-invalidLicense",
     "preprocessorErrorDirective",
     "syntaxError",
     "unknownMacro"
@@ -134,7 +137,7 @@ ErrorMessage::ErrorMessage(const ErrorPath &errorPath, const TokenList *tokenLis
 
         std::string info = e.second;
 
-        if (info.compare(0,8,"$symbol:") == 0 && info.find('\n') < info.size()) {
+        if (startsWith(info,"$symbol:") && info.find('\n') < info.size()) {
             const std::string::size_type pos = info.find('\n');
             const std::string &symbolName = info.substr(8, pos - 8);
             info = replaceStr(info.substr(pos+1), "$symbol", symbolName);
@@ -214,7 +217,7 @@ void ErrorMessage::setmsg(const std::string &msg)
     if (pos == std::string::npos) {
         mShortMessage = replaceStr(msg, "$symbol", symbolName);
         mVerboseMessage = replaceStr(msg, "$symbol", symbolName);
-    } else if (msg.compare(0,8,"$symbol:") == 0) {
+    } else if (startsWith(msg,"$symbol:")) {
         mSymbolNames += msg.substr(8, pos-7);
         setmsg(msg.substr(pos + 1));
     } else {
@@ -228,6 +231,35 @@ static void serializeString(std::string &oss, const std::string & str)
     oss += std::to_string(str.length());
     oss += " ";
     oss += str;
+}
+
+ErrorMessage ErrorMessage::fromInternalError(const InternalError &internalError, const TokenList *tokenList, const std::string &filename, const std::string& msg)
+{
+    if (internalError.token)
+        assert(tokenList != nullptr); // we need to make sure we can look up the provided token
+
+    std::list<ErrorMessage::FileLocation> locationList;
+    if (tokenList && internalError.token) {
+        ErrorMessage::FileLocation loc(internalError.token, tokenList);
+        locationList.push_back(std::move(loc));
+    } else {
+        ErrorMessage::FileLocation loc2(filename, 0, 0);
+        locationList.push_back(std::move(loc2));
+        if (tokenList && (filename != tokenList->getSourceFilePath())) {
+            ErrorMessage::FileLocation loc(tokenList->getSourceFilePath(), 0, 0);
+            locationList.push_back(std::move(loc));
+        }
+    }
+    ErrorMessage errmsg(std::move(locationList),
+                        tokenList ? tokenList->getSourceFilePath() : filename,
+                        Severity::error,
+                        (msg.empty() ? "" : (msg + ": ")) + internalError.errorMessage,
+                        internalError.id,
+                        Certainty::normal);
+    // TODO: find a better way
+    if (!internalError.details.empty())
+        errmsg.mVerboseMessage = errmsg.mVerboseMessage + ": " + internalError.details;
+    return errmsg;
 }
 
 std::string ErrorMessage::serialize() const
@@ -731,36 +763,36 @@ std::string ErrorMessage::FileLocation::stringify() const
 
 std::string ErrorLogger::toxml(const std::string &str)
 {
-    std::ostringstream xml;
+    std::string xml;
     for (const unsigned char c : str) {
         switch (c) {
         case '<':
-            xml << "&lt;";
+            xml += "&lt;";
             break;
         case '>':
-            xml << "&gt;";
+            xml += "&gt;";
             break;
         case '&':
-            xml << "&amp;";
+            xml += "&amp;";
             break;
         case '\"':
-            xml << "&quot;";
+            xml += "&quot;";
             break;
         case '\'':
-            xml << "&apos;";
+            xml += "&apos;";
             break;
         case '\0':
-            xml << "\\0";
+            xml += "\\0";
             break;
         default:
             if (c >= ' ' && c <= 0x7f)
-                xml << c;
+                xml += c;
             else
-                xml << 'x';
+                xml += 'x';
             break;
         }
     }
-    return xml.str();
+    return xml;
 }
 
 std::string ErrorLogger::plistHeader(const std::string &version, const std::vector<std::string> &files)

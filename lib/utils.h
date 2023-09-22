@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <initializer_list>
 #include <limits>
 #include <stdexcept>
@@ -78,6 +79,17 @@ struct EnumClassHash {
         return static_cast<std::size_t>(t);
     }
 };
+
+inline bool startsWith(const std::string& str, const char start[], std::size_t startlen)
+{
+    return str.compare(0, startlen, start) == 0;
+}
+
+template<std::size_t N>
+bool startsWith(const std::string& str, const char (&start)[N])
+{
+    return startsWith(str, start, N - 1);
+}
 
 inline bool endsWith(const std::string &str, char c)
 {
@@ -264,9 +276,59 @@ T strToInt(const std::string& str)
  * \return size of array
  * */
 template<typename T, int size>
+// cppcheck-suppress unusedFunction - only used in conditional code
 std::size_t getArrayLength(const T (& /*unused*/)[size])
 {
     return size;
+}
+
+/**
+ * @brief get id string. i.e. for dump files
+ * it will be a hexadecimal output.
+ */
+static inline std::string id_string_i(std::uintptr_t l)
+{
+    if (!l)
+        return "0";
+
+    static constexpr int ptr_size = sizeof(void*);
+
+    // two characters of each byte / contains terminating \0
+    static constexpr int buf_size = (ptr_size * 2) + 1;
+
+    char buf[buf_size];
+
+    // needs to be signed so we don't underflow in padding loop
+    int idx = buf_size - 1;
+    buf[idx] = '\0';
+
+    while (l != 0)
+    {
+        char c;
+        const uintptr_t temp = l % 16; // get the remainder
+        if (temp < 10) {
+            // 0-9
+            c = '0' + temp;
+        }
+        else {
+            // a-f
+            c = 'a' + (temp - 10);
+        }
+        buf[--idx] = c; // store in reverse order
+        l = l / 16;
+    }
+
+    return &buf[idx];
+}
+
+static inline std::string id_string(const void* p)
+{
+    return id_string_i(reinterpret_cast<uintptr_t>(p));
+}
+
+static inline const char* bool_to_string(bool b)
+{
+    return b ? "true" : "false";
 }
 
 #endif
